@@ -19,11 +19,10 @@ public:
     NUM_SECTORS = DATA_SIZE / SECTOR_SIZE
   };
 
-  MemoryCard(System* system);
-  ~MemoryCard();
+  using DataArray = std::array<u8, DATA_SIZE>;
 
-  static std::unique_ptr<MemoryCard> Create(System* system);
-  static std::unique_ptr<MemoryCard> Open(System* system, std::string_view filename);
+  MemoryCard(System* system, u32 slot, std::string path = {}, std::vector<u8> data = {});
+  ~MemoryCard();
 
   void Reset();
   bool DoState(StateWrapper& sw);
@@ -31,7 +30,7 @@ public:
   void ResetTransferState();
   bool Transfer(const u8 data_in, u8* data_out);
 
-  void Format();
+  static void InitializeMemoryCardData(DataArray& data);
 
 private:
   enum : u32
@@ -78,15 +77,15 @@ private:
   };
 
   static u8 ChecksumFrame(const u8* fptr);
+  static u8* GetSectorPtr(DataArray& data, u32 sector);
 
-  u8* GetSectorPtr(u32 sector);
-
-  bool LoadFromFile();
   bool SaveIfChanged(bool display_osd_message);
   void QueueFileSave();
 
   System* m_system;
   std::unique_ptr<TimingEvent> m_save_event;
+  std::string m_path;
+  u32 m_slot;
 
   State m_state = State::Idle;
   FLAG m_FLAG = {};
@@ -96,7 +95,5 @@ private:
   u8 m_last_byte = 0;
   bool m_changed = false;
 
-  std::array<u8, DATA_SIZE> m_data{};
-
-  std::string m_filename;
+  DataArray m_data{};
 };
