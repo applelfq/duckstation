@@ -111,6 +111,7 @@ private:
   void Execute_GPF(Instruction inst);
 
   Regs m_regs = {};
+
   bool m_widescreen_hack = false;
 };
 

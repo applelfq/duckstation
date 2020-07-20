@@ -440,8 +440,20 @@ TickCount DMA::TransferMemoryToDevice(Channel channel, u32 address, u32 incremen
   switch (channel)
   {
     case Channel::GPU:
-      m_gpu->DMAWrite(src_pointer, word_count);
-      break;
+    {
+      std::vector<u64> temp;
+      temp.reserve(word_count);
+      for (u32 i = 0; i < word_count; i++)
+      {
+        temp.push_back((ZeroExtend64(address) << 32) | ZeroExtend64(*src_pointer));
+        address = (address + increment) & ADDRESS_MASK;
+        src_pointer++;
+      }
+
+      m_gpu->DMAWrite(temp.data(), word_count);
+      // m_gpu->DMAWrite(src_pointer, word_count);
+    }
+    break;
 
     case Channel::SPU:
       m_spu->DMAWrite(src_pointer, word_count);

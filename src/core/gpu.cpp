@@ -355,7 +355,7 @@ void GPU::DMARead(u32* words, u32 word_count)
     words[i] = ReadGPUREAD();
 }
 
-void GPU::DMAWrite(const u32* words, u32 word_count)
+void GPU::DMAWrite(const u64* words, u32 word_count)
 {
   switch (m_GPUSTAT.dma_direction)
   {

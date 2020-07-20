@@ -2,6 +2,8 @@
 #include "common/assert.h"
 #include "common/log.h"
 #include "common/state_wrapper.h"
+#include "cpu_core.h"
+#include "pgxp/pgxp_gpu.h"
 #include "settings.h"
 #include "system.h"
 #include <imgui.h>
@@ -206,14 +208,28 @@ void GPU_HW::LoadVertices()
 
       const u32 num_vertices = rc.quad_polygon ? 4 : 3;
       std::array<BatchVertex, 4> vertices;
+      u8 valid_w = 1;
       for (u32 i = 0; i < num_vertices; i++)
       {
-        const u32 color = (shaded && i > 0) ? (m_fifo.Pop() & UINT32_C(0x00FFFFFF)) : first_color;
-        const VertexPosition vp{m_fifo.Pop()};
-        const u16 packed_texcoord = textured ? Truncate16(m_fifo.Pop()) : 0;
+        const u32 color = (shaded && i > 0) ? (FifoPop() & UINT32_C(0x00FFFFFF)) : first_color;
+        const u64 blah = m_fifo.Pop();
+        const VertexPosition vp{Truncate32(blah)};
+        const u16 packed_texcoord = textured ? Truncate16(FifoPop()) : 0;
 
-        vertices[i].Set(m_drawing_offset.x + vp.x, m_drawing_offset.y + vp.y, m_current_depth, color, texpage,
-                        packed_texcoord);
+        vertices[i].Set(m_drawing_offset.x + vp.x, m_drawing_offset.y + vp.y, m_current_depth, color, texpage, packed_texcoord);
+
+        const u32 maddr = Truncate32(blah >> 32);
+        OGLVertex pvert;
+        PGXP_GetVertex(maddr, vp.bits, &pvert, m_drawing_offset.x, m_drawing_offset.y);
+        vertices[i].px = pvert.x;
+        vertices[i].py = pvert.y;
+        vertices[i].pz = pvert.w;
+        valid_w &= pvert.valid_w;
+      }
+      if (!valid_w)
+      {
+        for (BatchVertex& v : vertices)
+          v.pz = 1.0f;
       }
 
       if (rc.quad_polygon && m_resolution_scale > 1)
@@ -291,11 +307,11 @@ void GPU_HW::LoadVertices()
     case Primitive::Rectangle:
     {
       const u32 color = rc.color_for_first_vertex;
-      const VertexPosition vp{m_fifo.Pop()};
+      const VertexPosition vp{FifoPop()};
       const s32 pos_x = TruncateVertexPosition(m_drawing_offset.x + vp.x);
       const s32 pos_y = TruncateVertexPosition(m_drawing_offset.y + vp.y);
 
-      const auto [texcoord_x, texcoord_y] = UnpackTexcoord(rc.texture_enable ? Truncate16(m_fifo.Pop()) : 0);
+      const auto [texcoord_x, texcoord_y] = UnpackTexcoord(rc.texture_enable ? Truncate16(FifoPop()) : 0);
       u16 orig_tex_left = ZeroExtend16(texcoord_x);
       u16 orig_tex_top = ZeroExtend16(texcoord_y);
       s32 rectangle_width;
@@ -316,7 +332,7 @@ void GPU_HW::LoadVertices()
           break;
         default:
         {
-          const u32 width_and_height = m_fifo.Pop();
+          const u32 width_and_height = FifoPop();
           rectangle_width = static_cast<s32>(width_and_height & VRAM_WIDTH_MASK);
           rectangle_height = static_cast<s32>((width_and_height >> 16) & VRAM_HEIGHT_MASK);
 
@@ -392,15 +408,15 @@ void GPU_HW::LoadVertices()
         if (rc.shading_enable)
         {
           color0 = rc.color_for_first_vertex;
-          pos0.bits = m_fifo.Pop();
-          color1 = m_fifo.Pop() & UINT32_C(0x00FFFFFF);
-          pos1.bits = m_fifo.Pop();
+          pos0.bits = FifoPop();
+          color1 = FifoPop() & UINT32_C(0x00FFFFFF);
+          pos1.bits = FifoPop();
         }
         else
         {
           color0 = color1 = rc.color_for_first_vertex;
-          pos0.bits = m_fifo.Pop();
-          pos1.bits = m_fifo.Pop();
+          pos0.bits = FifoPop();
+          pos1.bits = FifoPop();
         }
 
         if (!IsDrawingAreaIsValid())

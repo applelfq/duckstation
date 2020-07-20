@@ -47,6 +47,27 @@
     <ClCompile Include="gpu_hw_vulkan.cpp" />
     <ClCompile Include="resources.cpp" />
     <ClCompile Include="host_interface_progress_callback.cpp" />
+    <ClCompile Include="pgxp\pgxp_main.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_mem.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_value.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_cpu.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_debug.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_gpu.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
+    <ClCompile Include="pgxp\pgxp_gte.c">
+      <Filter>pgxp</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="types.h" />
@@ -95,10 +116,39 @@
     <ClInclude Include="gpu_hw_vulkan.h" />
     <ClInclude Include="resources.h" />
     <ClInclude Include="host_interface_progress_callback.h" />
+    <ClInclude Include="pgxp\pgxp_main.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_mem.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_types.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_value.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_cpu.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_debug.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_gpu.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
+    <ClInclude Include="pgxp\pgxp_gte.h">
+      <Filter>pgxp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpu_core.inl" />
     <None Include="bus.inl" />
     <None Include="gte.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="pgxp">
+      <UniqueIdentifier>{0fb39ecc-c343-4103-b84f-b9adf6c799c8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

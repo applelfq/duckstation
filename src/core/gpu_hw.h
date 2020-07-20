@@ -59,6 +59,9 @@ protected:
     s32 x;
     s32 y;
     s32 z;
+    float px;
+    float py;
+    float pz;
     u32 color;
     u32 texpage;
     u16 u; // 16-bit texcoords are needed for 256 extent rectangles
@@ -78,6 +81,9 @@ protected:
       texpage = texpage_;
       u = u_;
       v = v_;
+      px = float(x_);
+      py = float(y_);
+      pz = 1.0f;
     }
   };
 

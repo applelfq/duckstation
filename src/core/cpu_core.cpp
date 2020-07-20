@@ -3,6 +3,10 @@
 #include "common/log.h"
 #include "common/state_wrapper.h"
 #include "cpu_disasm.h"
+#include "pgxp/pgxp_cpu.h"
+#include "pgxp/pgxp_main.h"
+#include "pgxp/pgxp_gte.h"
+#include "pgxp/pgxp_mem.h"
 #include <cstdio>
 Log_SetChannel(CPU::Core);
 
@@ -46,6 +50,9 @@ void Core::Initialize(Bus* bus)
   m_cop0_regs.PRID = UINT32_C(0x00000002);
 
   m_cop2.Initialize();
+
+  PGXP_SetModes(PGXP_MODE_MEMORY | PGXP_MODE_GTE | PGXP_VERTEX_CACHE | PGXP_TEXTURE_CORRECTION);
+  PGXP_Init();
 }
 
 void Core::Reset()
@@ -997,6 +1004,7 @@ void Core::ExecuteInstruction()
         return;
 
       WriteRegDelayed(inst.i.rt, SignExtend32(value));
+      PGXP_CPU_LB(inst.bits, value, addr);
     }
     break;
 
@@ -1008,6 +1016,7 @@ void Core::ExecuteInstruction()
         return;
 
       WriteRegDelayed(inst.i.rt, SignExtend32(value));
+      PGXP_CPU_LH(inst.bits, value, addr);
     }
     break;
 
@@ -1019,6 +1028,7 @@ void Core::ExecuteInstruction()
         return;
 
       WriteRegDelayed(inst.i.rt, value);
+      PGXP_CPU_LW(inst.bits, value, addr);
     }
     break;
 
@@ -1030,6 +1040,7 @@ void Core::ExecuteInstruction()
         return;
 
       WriteRegDelayed(inst.i.rt, ZeroExtend32(value));
+      PGXP_CPU_LBU(inst.bits, value, addr);
     }
     break;
 
@@ -1041,6 +1052,7 @@ void Core::ExecuteInstruction()
         return;
 
       WriteRegDelayed(inst.i.rt, ZeroExtend32(value));
+      PGXP_CPU_LHU(inst.bits, value, addr);
     }
     break;
 
@@ -1061,11 +1073,13 @@ void Core::ExecuteInstruction()
       {
         const u32 mask = UINT32_C(0x00FFFFFF) >> shift;
         new_value = (existing_value & mask) | (aligned_value << (24 - shift));
+        PGXP_CPU_LWL(inst.bits, new_value, addr);
       }
       else
       {
         const u32 mask = UINT32_C(0xFFFFFF00) << (24 - shift);
         new_value = (existing_value & mask) | (aligned_value >> shift);
+        PGXP_CPU_LWR(inst.bits, new_value, addr);
       }
 
       WriteRegDelayed(inst.i.rt, new_value);
@@ -1077,6 +1091,7 @@ void Core::ExecuteInstruction()
       const VirtualMemoryAddress addr = ReadReg(inst.i.rs) + inst.i.imm_sext32();
       const u8 value = Truncate8(ReadReg(inst.i.rt));
       WriteMemoryByte(addr, value);
+      PGXP_CPU_SB(inst.bits, value, addr);
     }
     break;
 
@@ -1085,6 +1100,7 @@ void Core::ExecuteInstruction()
       const VirtualMemoryAddress addr = ReadReg(inst.i.rs) + inst.i.imm_sext32();
       const u16 value = Truncate16(ReadReg(inst.i.rt));
       WriteMemoryHalfWord(addr, value);
+      PGXP_CPU_SH(inst.bits, value, addr);
     }
     break;
 
@@ -1093,6 +1109,7 @@ void Core::ExecuteInstruction()
       const VirtualMemoryAddress addr = ReadReg(inst.i.rs) + inst.i.imm_sext32();
       const u32 value = ReadReg(inst.i.rt);
       WriteMemoryWord(addr, value);
+      PGXP_CPU_SW(inst.bits, value, addr);
     }
     break;
 
@@ -1112,11 +1129,13 @@ void Core::ExecuteInstruction()
       {
         const u32 mem_mask = UINT32_C(0xFFFFFF00) << shift;
         new_value = (mem_value & mem_mask) | (reg_value >> (24 - shift));
+        PGXP_CPU_SWL(inst.bits, new_value, addr);
       }
       else
       {
         const u32 mem_mask = UINT32_C(0x00FFFFFF) >> (24 - shift);
         new_value = (mem_value & mem_mask) | (reg_value << shift);
+        PGXP_CPU_SWR(inst.bits, new_value, addr);
       }
 
       WriteMemoryWord(aligned_addr, new_value);
@@ -1235,6 +1254,7 @@ void Core::ExecuteInstruction()
         return;
 
       m_cop2.WriteRegister(ZeroExtend32(static_cast<u8>(inst.i.rt.GetValue())), value);
+      PGXP_GTE_LWC2(inst.bits, value, addr);
     }
     break;
 
@@ -1248,8 +1268,10 @@ void Core::ExecuteInstruction()
       }
 
       const VirtualMemoryAddress addr = ReadReg(inst.i.rs) + inst.i.imm_sext32();
-      const u32 value = m_cop2.ReadRegister(ZeroExtend32(static_cast<u8>(inst.i.rt.GetValue())));
+      const u32 reg = ZeroExtend32(static_cast<u8>(inst.i.rt.GetValue()));
+      const u32 value = m_cop2.ReadRegister(reg);
       WriteMemoryWord(addr, value);
+      PGXP_GTE_SWC2(inst.bits, value, addr);
     }
     break;
 
@@ -1332,20 +1354,36 @@ void Core::ExecuteCop2Instruction()
     switch (inst.cop.CommonOp())
     {
       case CopCommonInstruction::cfcn:
-        WriteRegDelayed(inst.r.rt, m_cop2.ReadRegister(static_cast<u32>(inst.r.rd.GetValue()) + 32));
-        break;
+      {
+        const u32 value = m_cop2.ReadRegister(static_cast<u32>(inst.r.rd.GetValue()) + 32);
+        WriteRegDelayed(inst.r.rt, value);
+        PGXP_GTE_CFC2(inst.bits, value, value);
+      }
+      break;
 
       case CopCommonInstruction::ctcn:
-        m_cop2.WriteRegister(static_cast<u32>(inst.r.rd.GetValue()) + 32, ReadReg(inst.r.rt));
-        break;
+      {
+        const u32 value = ReadReg(inst.r.rt);
+        m_cop2.WriteRegister(static_cast<u32>(inst.r.rd.GetValue()) + 32, value);
+        PGXP_GTE_CTC2(inst.bits, value, value);
+      }
+      break;
 
       case CopCommonInstruction::mfcn:
-        WriteRegDelayed(inst.r.rt, m_cop2.ReadRegister(static_cast<u32>(inst.r.rd.GetValue())));
-        break;
+      {
+        const u32 value = m_cop2.ReadRegister(static_cast<u32>(inst.r.rd.GetValue()));
+        WriteRegDelayed(inst.r.rt, value);
+        PGXP_GTE_MFC2(inst.bits, value, value);
+      }
+      break;
 
       case CopCommonInstruction::mtcn:
-        m_cop2.WriteRegister(static_cast<u32>(inst.r.rd.GetValue()), ReadReg(inst.r.rt));
-        break;
+      {
+        const u32 value = ReadReg(inst.r.rt);
+        m_cop2.WriteRegister(static_cast<u32>(inst.r.rd.GetValue()), value);
+        PGXP_GTE_MTC2(inst.bits, value, value);
+      }
+      break;
 
       case CopCommonInstruction::bcnc:
       default:

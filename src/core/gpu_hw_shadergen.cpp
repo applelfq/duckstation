@@ -515,12 +515,14 @@ std::string GPU_HW_ShaderGen::GenerateBatchVertexShader(bool textured)
 
   if (textured)
   {
-    DeclareVertexEntryPoint(ss, {"int3 a_pos", "float4 a_col0", "uint a_texcoord", "uint a_texpage"}, 1, 1,
-                            {{"nointerpolation", "uint4 v_texpage"}}, false);
+    DeclareVertexEntryPoint(ss, {"int3 a_pos", "float3 a_ppos", "float4 a_col0", "uint a_texcoord", "uint a_texpage"},
+                            1, 1, {{"nointerpolation", "uint4 v_texpage"}, {"nointerpolation", "float v_depth"}},
+                            false);
   }
   else
   {
-    DeclareVertexEntryPoint(ss, {"int3 a_pos", "float4 a_col0"}, 1, 0, {}, false);
+    DeclareVertexEntryPoint(ss, {"int3 a_pos", "float3 a_ppos", "float4 a_col0"}, 1, 0,
+                            {{"nointerpolation", "float v_depth"}}, false);
   }
 
   ss << R"(
@@ -531,9 +533,10 @@ std::string GPU_HW_ShaderGen::GenerateBatchVertexShader(bool textured)
   float vertex_offset = (RESOLUTION_SCALE == 1u) ? 0.5 : 0.0;
 
   // 0..+1023 -> -1..1
-  float pos_x = ((float(a_pos.x) + vertex_offset) / 512.0) - 1.0;
-  float pos_y = ((float(a_pos.y) + vertex_offset) / -256.0) + 1.0;
-  float pos_z = 1.0 - (float(a_pos.z) / 65535.0);
+  float pos_x = ((float(a_ppos.x) + vertex_offset) / 512.0) - 1.0;
+  float pos_y = ((float(a_ppos.y) + vertex_offset) / -256.0) + 1.0;
+  float pos_z = a_ppos.z;
+  float pos_depth = 1.0 - (float(a_pos.z) / 65535.0);
 
 #if API_OPENGL || API_OPENGL_ES
   // OpenGL seems to be off by one pixel in the Y direction due to lower-left origin, but only on
@@ -541,7 +544,7 @@ std::string GPU_HW_ShaderGen::GenerateBatchVertexShader(bool textured)
   pos_y += EPSILON;
 
   // 0..1 to -1..1 depth range.
-  pos_z = (pos_z * 2.0) - 1.0;
+  pos_depth = (pos_depth * 2.0) - 1.0;
 #endif
 
   // NDC space Y flip in Vulkan.
@@ -549,7 +552,8 @@ std::string GPU_HW_ShaderGen::GenerateBatchVertexShader(bool textured)
   pos_y = -pos_y;
 #endif
 
-  v_pos = float4(pos_x, pos_y, pos_z, 1.0);
+  v_pos = float4(pos_x * pos_z, pos_y * pos_z, pos_depth * pos_z, pos_z);
+  v_depth = pos_depth;
 
   v_col0 = a_col0;
   #if TEXTURED
@@ -709,11 +713,12 @@ float4 SampleFromVRAM(uint4 texpage, float2 coords)
 
   if (textured)
   {
-    DeclareFragmentEntryPoint(ss, 1, 1, {{"nointerpolation", "uint4 v_texpage"}}, true, use_dual_source ? 2 : 1, true);
+    DeclareFragmentEntryPoint(ss, 1, 1, {{"nointerpolation", "uint4 v_texpage"}, {"nointerpolation", "float v_depth"}},
+                              true, use_dual_source ? 2 : 1, true);
   }
   else
   {
-    DeclareFragmentEntryPoint(ss, 1, 0, {}, true, use_dual_source ? 2 : 1, true);
+    DeclareFragmentEntryPoint(ss, 1, 0, {{"nointerpolation", "float v_depth"}}, true, use_dual_source ? 2 : 1, true);
   }
 
   ss << R"(
@@ -847,7 +852,7 @@ float4 SampleFromVRAM(uint4 texpage, float2 coords)
         o_col0 = float4(color, u_dst_alpha_factor / ialpha);
       #endif
 
-      o_depth = oalpha * v_pos.z;
+      o_depth = oalpha * v_depth;
     }
     else
     {
@@ -865,7 +870,7 @@ float4 SampleFromVRAM(uint4 texpage, float2 coords)
         o_col0 = float4(color, 1.0 - ialpha);
       #endif
 
-      o_depth = oalpha * v_pos.z;
+      o_depth = oalpha * v_depth;
     }
   #else
     // Non-transparency won't enable blending so we can write the mask here regardless.
@@ -875,7 +880,7 @@ float4 SampleFromVRAM(uint4 texpage, float2 coords)
       o_col1 = float4(0.0, 0.0, 0.0, 1.0 - ialpha);
     #endif
 
-    o_depth = oalpha * v_pos.z;
+    o_depth = oalpha * v_depth;
   #endif
 }
 )";
@@ -1175,10 +1180,10 @@ std::string GPU_HW_ShaderGen::GenerateVRAMWriteFragmentShader(bool use_ssbo)
   std::stringstream ss;
   WriteHeader(ss);
   WriteCommonFunctions(ss);
-  DeclareUniformBuffer(
-    ss,
-    {"uint2 u_base_coords", "uint2 u_end_coords", "uint2 u_size", "uint u_buffer_base_offset", "uint u_mask_or_bits", "float u_depth_value"},
-    true);
+  DeclareUniformBuffer(ss,
+                       {"uint2 u_base_coords", "uint2 u_end_coords", "uint2 u_size", "uint u_buffer_base_offset",
+                        "uint u_mask_or_bits", "float u_depth_value"},
+                       true);
 
   if (use_ssbo && m_glsl)
   {

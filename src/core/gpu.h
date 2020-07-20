@@ -140,7 +140,7 @@ public:
 
   // DMA access
   void DMARead(u32* words, u32 word_count);
-  void DMAWrite(const u32* words, u32 word_count);
+  void DMAWrite(const u64* words, u32 word_count);
 
   /// Returns the number of pending GPU ticks.
   TickCount GetPendingCRTCTicks() const;
@@ -708,10 +708,14 @@ protected:
     u16 row;
   } m_vram_transfer = {};
 
-  HeapFIFOQueue<u32, MAX_FIFO_SIZE> m_fifo;
+  HeapFIFOQueue<u64, MAX_FIFO_SIZE> m_fifo;
   std::vector<u32> m_blit_buffer;
   u32 m_blit_remaining_words;
   RenderCommand m_render_command{};
+
+  ALWAYS_INLINE u32 FifoPop() { return Truncate32(m_fifo.Pop()); }
+  ALWAYS_INLINE u32 FifoPeek() { return Truncate32(m_fifo.Peek()); }
+  ALWAYS_INLINE u32 FifoPeek(u32 i) { return Truncate32(m_fifo.Peek(i)); }
 
   TickCount m_max_run_ahead = 128;
   u32 m_fifo_size = 128;

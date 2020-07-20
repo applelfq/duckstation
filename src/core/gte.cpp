@@ -1,5 +1,6 @@
 #include "gte.h"
 #include "common/bitutils.h"
+#include "pgxp/pgxp_gte.h"
 #include <algorithm>
 #include <array>
 
@@ -23,6 +24,7 @@ void Core::Initialize() {}
 void Core::Reset()
 {
   std::memset(&m_regs, 0, sizeof(m_regs));
+  PGXP_InitGTE();
 }
 
 bool Core::DoState(StateWrapper& sw)
@@ -103,6 +105,12 @@ void Core::WriteRegister(u32 index, u32 value)
       m_regs.r32[index] = ZeroExtend32(Truncate16(value));
     }
     break;
+
+    case 12:
+    case 13:
+    case 14:
+      m_regs.r32[index] = value;
+      break;
 
     case 15: // SXY3
     {
@@ -587,6 +595,20 @@ void Core::RTPS(const s16 V[3], u8 shift, bool lm, bool last)
   CheckMACOverflow<0>(Sy);
   PushSXY(s32(Sx >> 16), s32(Sy >> 16));
 
+  {
+    // this can potentially use increased precision on Z
+    const float precise_z = std::max<float>((float)m_regs.H / 2.f, (float)m_regs.SZ3);
+    const float precise_h_div_sz = (float)m_regs.H / precise_z;
+    const float fofx = ((float)m_regs.OFX / (float)(1 << 16));
+    const float fofy = ((float)m_regs.OFY / (float)(1 << 16));
+    float precise_x = fofx + ((float)m_regs.IR1 * precise_h_div_sz) * ((m_widescreen_hack) ? 0.75 : 1.00);
+    float precise_y = fofy + ((float)m_regs.IR2 * precise_h_div_sz);
+
+    precise_x = std::clamp<float>(precise_x, -0x400, 0x3ff);
+    precise_y = std::clamp<float>(precise_y, -0x400, 0x3ff);
+    PGXP_pushSXYZ2f(precise_x, precise_y, precise_z, m_regs.dr32[14]);
+  }
+
   if (last)
   {
     // MAC0=(((H*20000h/SZ3)+1)/2)*DQA+DQB, IR0=MAC0/1000h  ;Depth cueing 0..+1000h
@@ -622,10 +644,17 @@ void Core::Execute_NCLIP(Instruction inst)
   // MAC0 =   SX0*SY1 + SX1*SY2 + SX2*SY0 - SX0*SY2 - SX1*SY0 - SX2*SY1
   m_regs.FLAG.Clear();
 
-  TruncateAndSetMAC<0>(s64(m_regs.SXY0[0]) * s64(m_regs.SXY1[1]) + s64(m_regs.SXY1[0]) * s64(m_regs.SXY2[1]) +
-                         s64(m_regs.SXY2[0]) * s64(m_regs.SXY0[1]) - s64(m_regs.SXY0[0]) * s64(m_regs.SXY2[1]) -
-                         s64(m_regs.SXY1[0]) * s64(m_regs.SXY0[1]) - s64(m_regs.SXY2[0]) * s64(m_regs.SXY1[1]),
-                       0);
+  if (PGXP_NLCIP_valid(m_regs.dr32[12], m_regs.dr32[13], m_regs.dr32[14]))
+  {
+    m_regs.MAC0 = static_cast<s64>(PGXP_NCLIP());
+  }
+  else
+  {
+    TruncateAndSetMAC<0>(s64(m_regs.SXY0[0]) * s64(m_regs.SXY1[1]) + s64(m_regs.SXY1[0]) * s64(m_regs.SXY2[1]) +
+                           s64(m_regs.SXY2[0]) * s64(m_regs.SXY0[1]) - s64(m_regs.SXY0[0]) * s64(m_regs.SXY2[1]) -
+                           s64(m_regs.SXY1[0]) * s64(m_regs.SXY0[1]) - s64(m_regs.SXY2[0]) * s64(m_regs.SXY1[1]),
+                         0);
+  }
 
   m_regs.FLAG.UpdateError();
 }
