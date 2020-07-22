@@ -252,6 +252,13 @@ std::vector<std::string> GameList::ParseM3UFile(const char* path)
       continue;
 
     std::string entry_path(line.begin() + start_offset, line.begin() + end_offset + 1);
+    if (!FileSystem::IsAbsolutePath(entry_path))
+    {
+      SmallString absolute_path;
+      FileSystem::BuildPathRelativeToFile(absolute_path, path, entry_path.c_str());
+      entry_path = absolute_path;
+    }
+
     Log_DevPrintf("Read path from m3u: '%s'", entry_path.c_str());
     entries.push_back(std::move(entry_path));
   }
