@@ -1005,6 +1005,8 @@ bool System::InsertMedia(const char* path)
 
   UpdateRunningGame(path, image.get());
   m_cdrom->InsertMedia(std::move(image));
+  Log_InfoPrintf("Inserted media from %s (%s, %s)", m_running_game_path.c_str(), m_running_game_code.c_str(),
+                 m_running_game_title.c_str());
 
   if (GetSettings().HasAnyPerGameMemoryCards())
   {
